@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 final _blue = Colors.blue;
 final _darkGray = Colors.blueGrey[800];
@@ -14,8 +15,9 @@ final _textSize = 20.0;
 final _addIcon = Icons.add;
 final _doneIcon = Icons.check;
 final _todoIcon = Icons.error;
-final _trashIcon = Icons.delete;
-final _sortIcon = Icons.sort_by_alpha;
+final _trashIcon = Icons.delete_sweep;
+final _checkAllIcon = Icons.check_box;
+final _checkNoneIcon = Icons.check_box_outline_blank;
 
 void main() {
   runApp(MaterialApp(
@@ -33,9 +35,11 @@ class _HomeState extends State<Home> {
   final titleKey = 'title';
   final doneKey = 'done';
 
+  GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   List _todoList = [];
   Map<String, dynamic> _lastRemoved = Map();
   int _lastRemovedPosition;
+  bool _selectAll = false;
 
   @override
   void initState() {
@@ -49,24 +53,53 @@ class _HomeState extends State<Home> {
   }
 
   void _addTask() {
-    setState(() {
-      Map<String, dynamic> newTask = Map();
-      newTask[titleKey] = _taskController.text;
-      newTask[doneKey] = false;
+    try {
+      setState(() {
+        Map<String, dynamic> newTask = Map();
+        newTask[titleKey] = _taskController.text.trim();
+        newTask[doneKey] = false;
 
-      if (!_todoList
-          .map((t) => t[titleKey])
-          .toList()
-          .contains(_taskController.text)) {
-        _todoList.add(newTask);
-        _saveData();
+        bool notExists = !_todoList
+            .map((t) => t[titleKey])
+            .toList()
+            .contains(_taskController.text);
 
-        _taskController.clear();
-      }
-    });
+        bool exists = !notExists;
+
+        bool isValid = _formKey.currentState.validate();
+
+        if (exists) throw Exception();
+
+        if (isValid && notExists) {
+          _todoList.add(newTask);
+          _saveData();
+
+          _taskController.clear();
+        }
+      });
+    } catch (e) {
+      Fluttertoast.showToast(
+          msg: 'Uma tarefa com este nome já existe!',
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIos: 1,
+          backgroundColor: _darkGray,
+          textColor: _yellow,
+          fontSize: _labelSize);
+    }
   }
 
   void _sortTasks() {
+    if (_todoList.isEmpty)
+      Fluttertoast.showToast(
+          msg: 'A lista de tarefas está vazia! :(',
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIos: 1,
+          backgroundColor: _darkGray,
+          textColor: _yellow,
+          fontSize: _labelSize);
+
     setState(() {
       _todoList.sort((task1, task2) {
         if (task1[doneKey] && !task2[doneKey])
@@ -78,6 +111,18 @@ class _HomeState extends State<Home> {
       });
 
       _saveData();
+    });
+  }
+
+  void _selectAllTasks() {
+    setState(() {
+      if (_selectAll) {
+        _todoList.forEach((task) => task[doneKey] = false);
+        _selectAll = false;
+      } else {
+        _todoList.forEach((task) => task[doneKey] = true);
+        _selectAll = true;
+      }
     });
   }
 
@@ -94,47 +139,60 @@ class _HomeState extends State<Home> {
         centerTitle: true,
         actions: <Widget>[
           IconButton(
-            icon: Icon(_sortIcon),
-            onPressed: _sortTasks,
+            icon: Icon(_selectAll ? _checkAllIcon : _checkNoneIcon),
+            onPressed: _selectAllTasks,
+            tooltip: 'Selecionar todas as tarefas',
           )
         ],
       ),
-      body: Column(
-        children: <Widget>[
-          Container(
-            padding: EdgeInsets.symmetric(vertical: 2.5, horizontal: 10.0),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: _taskController,
-                    keyboardType: TextInputType.text,
-                    textCapitalization: TextCapitalization.sentences,
-                    style: TextStyle(color: _darkGray, fontSize: _textSize),
-                    decoration: InputDecoration(
-                        labelText: 'Nova tarefa',
-                        labelStyle:
-                            TextStyle(color: _blue, fontSize: _labelSize)),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          children: <Widget>[
+            Container(
+              padding: EdgeInsets.symmetric(vertical: 2.5, horizontal: 10.0),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextFormField(
+                      controller: _taskController,
+                      validator: (value) {
+                        if (value.isEmpty) return 'Informe o nome';
+                        if (value.length < 3)
+                          return 'O nome deve ter no mínimo 3 caracteres';
+                        else
+                          return null;
+                      },
+                      keyboardType: TextInputType.text,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: TextStyle(color: _darkGray, fontSize: _textSize),
+                      decoration: InputDecoration(
+                          labelText: 'Nova tarefa',
+                          labelStyle:
+                              TextStyle(color: _blue, fontSize: _labelSize)),
+                    ),
                   ),
-                ),
-                RaisedButton(
-                  color: _blue,
-                  child: Icon(
-                    _addIcon,
-                    color: _white,
-                  ),
-                  onPressed: _addTask,
-                )
-              ],
+                  RaisedButton(
+                    color: _blue,
+                    shape: CircleBorder(),
+                    elevation: 6,
+                    child: Icon(
+                      _addIcon,
+                      color: _white,
+                    ),
+                    onPressed: _addTask,
+                  )
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-                padding: EdgeInsets.only(top: 10.0),
-                itemCount: _todoList.length,
-                itemBuilder: buildItem),
-          )
-        ],
+            Expanded(
+              child: ListView.builder(
+                  padding: EdgeInsets.only(top: 10.0),
+                  itemCount: _todoList.length,
+                  itemBuilder: buildItem),
+            )
+          ],
+        ),
       ),
     );
   }
@@ -156,7 +214,7 @@ class _HomeState extends State<Home> {
             duration: Duration(seconds: 3),
             action: SnackBarAction(
                 label: "Desfazer",
-                textColor: _blue,
+                textColor: _yellow,
                 onPressed: () {
                   setState(() {
                     _todoList.insert(_lastRemovedPosition, _lastRemoved);
@@ -195,7 +253,7 @@ class _HomeState extends State<Home> {
         value: _todoList[index][doneKey],
         onChanged: (checked) {
 //          setState(() {
-            _todoList[index][doneKey] = checked;
+          _todoList[index][doneKey] = checked;
 //            _saveData();
           _sortTasks();
 //          });
